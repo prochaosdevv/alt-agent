@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Alt-agent</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Carlito:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EDE9DE;
+    --paper:#FFFFFF;
+    --paper-edge:#D8D2C2;
+    --ink:#211D16;
+    --text:#211D16;
+    --muted:#6E6656;
+    --text-muted:#6E6656;
+    --copper:#96731F;
+    --copper-ink:#FFFFFF;
+    --stamp:#2B5A38;
+    --shadow: 0 30px 60px -20px rgba(33,29,22,.35);
+  }
+  /* --ink/--muted are always dark — text sitting on the pale paper receipt, which stays
+     pale in both themes. --text/--text-muted are for text sitting directly on the page
+     background, which flips light/dark with the theme. Using the paper tokens for both
+     is the bug that made the left column unreadable in dark mode. */
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#2B2319;
+      --paper:#F7F4EC;
+      --paper-edge:#E4DEC9;
+      --ink:#1E1B16;
+      --text:#F0E9DC;
+      --muted:#8A8172;
+      --text-muted:#B3A891;
+      --copper:#D4AC4E;
+      --copper-ink:#241D14;
+      --stamp:#5FAE76;
+      --shadow: 0 30px 70px -18px rgba(0,0,0,.6);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#2B2319;
+    --paper:#F7F4EC;
+    --paper-edge:#E4DEC9;
+    --ink:#1E1B16;
+    --text:#F0E9DC;
+    --muted:#8A8172;
+    --text-muted:#B3A891;
+    --copper:#D4AC4E;
+    --copper-ink:#241D14;
+    --stamp:#5FAE76;
+    --shadow: 0 30px 70px -18px rgba(0,0,0,.6);
+  }
+
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    background:var(--bg);
+    background-image:
+      radial-gradient(1400px 800px at 15% -10%, rgba(255,255,255,.05), transparent 60%),
+      radial-gradient(1100px 700px at 100% 110%, rgba(255,255,255,.04), transparent 60%);
+    color:var(--text);
+    font-family:Calibri,Carlito,system-ui,sans-serif;
+    min-height:100%;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .page{
+    max-width:1240px;
+    margin:0 auto;
+    padding:72px 40px;
+    min-height:100vh;
+    display:flex;
+    align-items:center;
+  }
+
+  .layout{
+    width:100%;
+    display:grid;
+    grid-template-columns: 1.15fr 420px;
+    gap:80px;
+    align-items:center;
+  }
+
+  /* ── Left: pitch ── */
+  .brand{
+    display:flex;align-items:baseline;gap:12px;
+    font-family:'Space Mono',ui-monospace,monospace;
+    margin-bottom:18px;
+  }
+  .brand .mark{font-size:22px;font-weight:700;letter-spacing:-.01em;}
+  .brand .tag{
+    font-size:10.5px;color:var(--text-muted);letter-spacing:.08em;text-transform:uppercase;
+    border-left:1.5px solid var(--paper-edge);padding-left:12px;
+  }
+
+  h1{
+    font-family:'Space Mono',ui-monospace,monospace;
+    font-weight:700;
+    font-size:clamp(36px,4.6vw,58px);
+    line-height:1.08;
+    margin:0 0 22px;
+    letter-spacing:-.01em;
+    text-wrap:balance;
+    max-width:15ch;
+  }
+  .thesis{
+    font-size:18px;line-height:1.65;color:var(--text-muted);
+    margin:0 0 36px;
+    max-width:46ch;
+  }
+  .thesis b{color:var(--text);font-weight:700;}
+
+  .cta{
+    display:inline-flex;align-items:center;justify-content:center;gap:10px;
+    background:var(--copper);
+    color:var(--copper-ink);
+    font-family:'Space Mono',ui-monospace,monospace;
+    font-weight:700;font-size:15.5px;letter-spacing:.02em;
+    text-decoration:none;
+    padding:17px 30px;
+    border:none;
+    cursor:pointer;
+    transition:transform .12s ease, filter .12s ease;
+  }
+  .cta:hover{filter:brightness(1.06);transform:translateY(-1px);}
+  .cta:active{transform:translateY(0);}
+  .cta .arrow{transition:transform .12s ease;}
+  .cta:hover .arrow{transform:translateX(3px);}
+
+  .foot{
+    margin-top:20px;
+    font-family:'IBM Plex Mono',ui-monospace,monospace;
+    font-size:11.5px;color:var(--text-muted);
+    letter-spacing:.03em;
+  }
+
+  /* ── Right: the receipt ── */
+  .receipt{
+    background:var(--paper);
+    color:var(--ink);
+    box-shadow:var(--shadow);
+    position:relative;
+    padding:32px 30px 28px;
+  }
+  .perf{
+    height:14px;
+    width:100%;
+    background-image:radial-gradient(circle at 10px 7px, var(--bg) 6px, transparent 6.5px);
+    background-size:20px 14px;
+    background-repeat:repeat-x;
+    margin:0 0 -1px;
+  }
+  .perf.top{transform:translateY(7px);}
+  .perf.bottom{transform:translateY(-7px);}
+
+  .receipt-head{
+    font-family:'IBM Plex Mono',ui-monospace,monospace;
+    font-size:11px;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;
+    display:flex;justify-content:space-between;
+    margin-bottom:18px;
+  }
+
+  .rule{border:none;border-top:1.5px dashed var(--paper-edge);margin:0 0 18px;}
+
+  .items{list-style:none;margin:0 0 8px;padding:0;display:flex;flex-direction:column;gap:15px;}
+  .item{display:flex;justify-content:space-between;gap:16px;align-items:baseline;}
+  .item .name{font-size:14px;font-weight:700;}
+  .item .desc{display:block;font-weight:400;font-size:12.5px;color:var(--muted);margin-top:2px;line-height:1.5;}
+  .item .price{
+    font-family:'IBM Plex Mono',ui-monospace,monospace;
+    font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums;
+    color:var(--stamp);
+  }
+
+  .total{
+    display:flex;justify-content:space-between;align-items:baseline;
+    margin:22px 0 4px;padding-top:16px;border-top:1.5px dashed var(--paper-edge);
+    font-family:'Space Mono',ui-monospace,monospace;
+  }
+  .total .label{font-size:12.5px;letter-spacing:.03em;}
+  .total .value{font-size:12.5px;color:var(--stamp);font-weight:700;}
+
+  .stamp{
+    position:absolute;
+    top:38px;right:26px;
+    width:70px;height:70px;
+    border:2.5px solid var(--stamp);
+    border-radius:50%;
+    color:var(--stamp);
+    display:flex;align-items:center;justify-content:center;
+    transform:rotate(-14deg);
+    font-family:'Space Mono',ui-monospace,monospace;
+    font-size:9.5px;font-weight:700;letter-spacing:.05em;
+    text-align:center;line-height:1.3;
+    opacity:.5;
+    pointer-events:none;
+  }
+
+  @media (max-width:940px){
+    .page{padding:48px 24px;align-items:flex-start;}
+    .layout{grid-template-columns:1fr;gap:40px;}
+    .receipt{max-width:460px;}
+    h1{max-width:none;}
+  }
+  @media (max-width:400px){
+    .receipt{padding:26px 22px 24px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+  <div class="layout">
+
+    <div class="intro">
+      <div class="brand">
+        <span class="mark">Alt-agent</span>
+        <span class="tag">Hedera Testnet · x402 · via Blocky402</span>
+      </div>
+
+      <h1>An agent that pays for its own inference.</h1>
+      <p class="thesis">
+        Every message is metered and settled on-chain before the model sees it —
+        <b>no subscription</b>, just a live Hedera payment per request.
+      </p>
+
+      <a class="cta" href="/chat.html">
+        Start chatting <span class="arrow">→</span>
+      </a>
+      <p class="foot">thank you for your business — keep this receipt</p>
+    </div>
+
+    <div class="receipt">
+      <div class="perf top"></div>
+
+      <div class="receipt-head">
+        <span>Itemized</span>
+        <span>Claude · GPT</span>
+      </div>
+      <hr class="rule">
+
+      <ul class="items">
+        <li class="item">
+          <span class="name">Router picks the model
+            <span class="desc">Prompt length &amp; keywords choose the cheapest capable tier — no ML</span>
+          </span>
+          <span class="price">$0.0005–$0.002</span>
+        </li>
+        <li class="item">
+          <span class="name">x402 payment gate
+            <span class="desc">HTTP 402 until a real Hedera payment settles via Blocky402</span>
+          </span>
+          <span class="price">per call</span>
+        </li>
+        <li class="item">
+          <span class="name">Prepaid credits
+            <span class="desc">Connect a wallet once — the agent spends autonomously from there</span>
+          </span>
+          <span class="price">no popup</span>
+        </li>
+        <li class="item">
+          <span class="name">Wallet-direct fallback
+            <span class="desc">Balance runs out → your wallet signs the next payment itself</span>
+          </span>
+          <span class="price">0.001 ℏ</span>
+        </li>
+        <li class="item">
+          <span class="name">Search agent, on demand
+            <span class="desc">No live web access on its own — Alt-agent pays a second, independent agent for it</span>
+          </span>
+          <span class="price">agent-paid</span>
+        </li>
+        <li class="item">
+          <span class="name">HCS audit log
+            <span class="desc">Every paid call, publicly verifiable on the mirror node</span>
+          </span>
+          <span class="price">on-chain</span>
+        </li>
+      </ul>
+
+      <div class="total">
+        <span class="label">MODELS ON TAP</span>
+        <span class="value">CLAUDE · GPT</span>
+      </div>
+
+      <div class="stamp">PAID<br>ON<br>HEDERA</div>
+
+      <div class="perf bottom"></div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

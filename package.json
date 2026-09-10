@@ -1,0 +1,23 @@
+{
+  "name": "alt-agent",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "scripts"
+  ],
+  "scripts": {
+    "postinstall": "npm run build --workspace=packages/shared",
+    "service": "npm run dev --workspace=packages/service",
+    "agent": "npm run dev --workspace=packages/agent",
+    "dev": "concurrently --names service,agent --prefix-colors cyan,magenta \"npm run service\" \"npm run agent\"",
+    "build": "npm run build --workspace=packages/shared && npm run build --workspaces --if-present",
+    "associate": "npm run associate --workspace=scripts",
+    "create-topic": "npm run create-topic --workspace=scripts",
+    "smoke-test": "npm run smoke-test --workspace=scripts --",
+    "test": "npm run test --workspace=packages/shared"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.5.4"
+  }
+}

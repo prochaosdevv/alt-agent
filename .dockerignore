@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+**/dist
+packages/agent/public/wallet-bundle.js
+.git
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+.DS_Store
+.vscode
+.idea
+*.tsbuildinfo

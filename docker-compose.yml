@@ -1,0 +1,53 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    ports:
+      - "27017:27017"
+
+  service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: service
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Overrides whatever's in .env — inside the Docker network, Mongo is reachable by its
+      # service name, not localhost.
+      MONGODB_URI: mongodb://mongo:27017
+      PORT: "4021"
+    ports:
+      - "4021:4021"
+    depends_on:
+      - mongo
+
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: agent
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Internal (container-to-container) URL for this server's own calls to the service.
+      INFERENCE_SERVICE_URL: http://service:4021
+      # Browser-facing URL, handed to the client via /api/config — the user's browser runs
+      # outside the Docker network and can't resolve "service", so this must be a host-reachable
+      # address. Override with your real public URL/domain when deploying beyond localhost.
+      PUBLIC_SERVICE_URL: http://localhost:4021
+      # AGENT_PORT is left unset here on purpose — the app listens on its default (3001)
+      # *inside* the container; only the host-side published port changes below. Setting
+      # AGENT_PORT here too would make it listen on 3061 internally instead, breaking the
+      # "3061:3001" mapping (nothing would be listening on the container's port 3001).
+    ports:
+      - "3061:3001"
+    depends_on:
+      - service
+
+volumes:
+  mongo-data:

@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alt-agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    [hidden] { display: none !important; }
+
+    :root {
+      --bg:          #05060A;
+      --surface:     #11151D;
+      --surface-2:   #191E2B;
+      --border:      #232A40;
+      --accent:      #8259EF;
+      --accent-2:    #2D84EB;
+      --accent-dim:  #8259EF18;
+      --gradient:    linear-gradient(135deg, #8259EF, #2D84EB);
+      --user-bg:     #0C1228;
+      --user-border: #1C2C58;
+      --ai-bg:       #11151D;
+      --ai-border:   #1D2338;
+      --text:        #FFFFFF;
+      --text-muted:  #9B9B9D;
+      --text-dim:    #424760;
+      --cobalt:      #2D84EB;
+      --cobalt-dim:  #2D84EB18;
+      --red:         #E05454;
+      --code-bg:     #080B14;
+      --code-border: #1A2038;
+      --radius:      8px;
+      --radius-sm:   6px;
+    }
+
+    html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Montserrat', system-ui, sans-serif; font-size: 15px; line-height: 1.6; }
+
+    /* ── Layout ── */
+    .app { display: flex; flex-direction: column; height: 100dvh; max-width: 860px; margin: 0 auto; }
+
+    /* ── Header ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; row-gap: 10px;
+      padding: 14px 24px; border-bottom: 1px solid var(--border);
+      background: var(--surface); flex-shrink: 0; gap: 12px;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+    .logo {
+      width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+      background: var(--gradient);
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Montserrat', sans-serif; font-weight: 700; font-size: 19px; color: #fff; letter-spacing: -1px;
+    }
+    .header-title { font-size: 15px; font-weight: 700; letter-spacing: -0.3px; white-space: nowrap; }
+    .header-sub   {
+      font-size: 11.5px; color: var(--text-muted); margin-top: 1px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 46vw;
+    }
+    .header-right { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 8px; row-gap: 8px; flex: 1 1 auto; min-width: 0; }
+
+    /* ── Toggle groups ── */
+    .toggle-group {
+      display: flex; align-items: center; gap: 2px;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: 20px; padding: 3px;
+    }
+    .toggle-label {
+      font-size: 10px; color: var(--text-dim); font-weight: 600;
+      text-transform: uppercase; letter-spacing: .6px; padding: 0 6px 0 4px;
+    }
+    .toggle-btn {
+      padding: 4px 11px; border-radius: 16px; border: none;
+      font-size: 11.5px; font-weight: 500; cursor: pointer;
+      background: transparent; color: var(--text-muted);
+      transition: all .15s; font-family: 'Montserrat', system-ui, sans-serif;
+    }
+    .toggle-btn:hover:not(.active) { color: var(--text); }
+    .toggle-btn.active { background: var(--gradient); color: #fff; font-weight: 600; }
+    .toggle-group.disabled { opacity: .35; pointer-events: none; }
+    .tier-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
+      color: var(--accent); padding: 3px 9px;
+      background: var(--accent-dim); border: 1px solid #8259EF30; border-radius: 20px;
+    }
+    .network-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); animation: pulse 2s ease-in-out infinite; display: inline-block; margin-right: 4px; vertical-align: middle; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .spend-counter {
+      display: flex; align-items: center; gap: 8px; padding: 5px 12px;
+      border-radius: 20px; background: var(--cobalt-dim); border: 1px solid #2D84EB30;
+      flex-shrink: 0;
+    }
+    .spend-label  { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: .6px; }
+    .spend-amount { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--cobalt); transition: all .3s ease; }
+    .spend-amount.flash { color: var(--accent); transform: scale(1.08); }
+
+    /* ── Wallet connect (inline in header, no overlay) ── */
+    .wallet-area { display: flex; align-items: center; flex-shrink: 0; }
+    .wallet-btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 7px 14px; border-radius: 20px; border: none;
+      background: var(--gradient); color: #fff; font-size: 12px; font-weight: 600;
+      cursor: pointer; font-family: 'Montserrat', system-ui, sans-serif; white-space: nowrap;
+      transition: opacity .15s;
+    }
+    .wallet-btn:hover { opacity: .88; }
+    .wallet-btn-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); flex-shrink: 0;
+    }
+
+    .wallet-connected-row {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 4px 6px 4px 10px; border-radius: 20px;
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .wallet-account {
+      font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-muted);
+    }
+    .credits-pill {
+      display: flex; align-items: center; gap: 5px; padding: 3px 10px;
+      border-radius: 14px; background: var(--cobalt-dim); border: 1px solid #2D84EB30;
+    }
+    .credits-pill-label {
+      font-size: 9.5px; color: var(--text-muted); font-weight: 600;
+      text-transform: uppercase; letter-spacing: .4px;
+    }
+    .credits-pill strong {
+      font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--cobalt);
+    }
+    .credits-buy-btn-sm {
+      padding: 4px 9px; border-radius: 14px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font-size: 11px; font-weight: 600;
+      cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all .15s;
+    }
+    .credits-buy-btn-sm:hover { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+    .wallet-disconnect-btn {
+      width: 20px; height: 20px; border-radius: 50%; border: none; background: none;
+      color: var(--text-dim); font-size: 11px; cursor: pointer; display: flex;
+      align-items: center; justify-content: center; transition: color .15s;
+    }
+    .wallet-disconnect-btn:hover { color: var(--red); }
+
+    /* ── Messages ── */
+    .messages { flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    .message { display: flex; gap: 12px; max-width: 88%; animation: slideIn .2s ease-out; }
+    @keyframes slideIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .message.user      { align-self: flex-end;   flex-direction: row-reverse; }
+    .message.assistant { align-self: flex-start; }
+
+    .avatar {
+      width: 34px; height: 34px; border-radius: 8px; display: flex;
+      align-items: center; justify-content: center; font-size: 16px;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .avatar.ai   { background: var(--gradient); font-style: italic; font-weight: 700; font-family: 'Montserrat', sans-serif; color: #fff; font-size: 15px; }
+    .avatar.user { background: var(--user-bg); border: 1px solid var(--user-border); }
+
+    .bubble-wrap { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+    .bubble {
+      padding: 12px 16px; border-radius: var(--radius);
+      font-size: 14.5px; line-height: 1.7; word-break: break-word;
+    }
+    .message.user .bubble {
+      background: var(--user-bg); border: 1px solid var(--user-border);
+      border-radius: var(--radius) 4px var(--radius) var(--radius);
+      color: #C5D3F5; white-space: pre-wrap;
+    }
+    .message.assistant .bubble {
+      background: var(--ai-bg); border: 1px solid var(--ai-border);
+      border-radius: 4px var(--radius) var(--radius) var(--radius);
+      color: var(--text);
+    }
+
+    /* ── Markdown (assistant bubbles only) ── */
+    .bubble.markdown p            { margin: 0 0 .85em; }
+    .bubble.markdown p:last-child { margin-bottom: 0; }
+    .bubble.markdown h1,.bubble.markdown h2,.bubble.markdown h3,
+    .bubble.markdown h4,.bubble.markdown h5,.bubble.markdown h6 {
+      margin: 1em 0 .4em; font-weight: 700; line-height: 1.3;
+    }
+    .bubble.markdown h1 { font-size: 1.35em; }
+    .bubble.markdown h2 { font-size: 1.18em; }
+    .bubble.markdown h3 { font-size: 1.05em; }
+    .bubble.markdown ul,.bubble.markdown ol { padding-left: 1.4em; margin: .5em 0 .85em; }
+    .bubble.markdown li { margin: .25em 0; }
+    .bubble.markdown code {
+      font-family: 'JetBrains Mono', monospace; font-size: .85em;
+      background: var(--code-bg); border: 1px solid var(--code-border);
+      border-radius: 4px; padding: .1em .4em; color: #A89BE8;
+    }
+    .bubble.markdown pre {
+      background: var(--code-bg); border: 1px solid var(--code-border);
+      border-radius: var(--radius-sm); padding: 14px 16px; overflow-x: auto;
+      margin: .7em 0; font-size: .85em; line-height: 1.6;
+    }
+    .bubble.markdown pre code { background: none; border: none; padding: 0; color: #C4BDEA; border-radius: 0; }
+    .bubble.markdown blockquote {
+      border-left: 3px solid var(--accent); padding: .5em 1em; margin: .6em 0;
+      color: var(--text-muted); background: var(--accent-dim); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+    }
+    .bubble.markdown a { color: var(--cobalt); text-decoration: underline; text-underline-offset: 3px; }
+    .bubble.markdown a:hover { color: #5BA8F0; }
+    .bubble.markdown hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+    .bubble.markdown strong { font-weight: 700; color: #E8EAFF; }
+    .bubble.markdown table { border-collapse: collapse; width: 100%; margin: .7em 0; font-size: .9em; }
+    .bubble.markdown th,.bubble.markdown td { border: 1px solid var(--border); padding: .45em .75em; text-align: left; }
+    .bubble.markdown th { background: var(--surface-2); font-weight: 600; }
+    .bubble.markdown tr:nth-child(even) td { background: #11151D80; }
+
+    /* ── Payment badge + HashScan ── */
+    .payment-info { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .payment-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
+      color: var(--cobalt); padding: 3px 9px;
+      background: var(--cobalt-dim); border: 1px solid #2D84EB30; border-radius: 20px;
+    }
+    .hashscan-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11.5px; color: var(--accent); text-decoration: none;
+      padding: 3px 9px; border-radius: 20px;
+      background: var(--accent-dim); border: 1px solid #8259EF30;
+      transition: all .15s; font-weight: 500;
+    }
+    .hashscan-link:hover { background: #8259EF28; border-color: var(--accent); }
+    .hashscan-link svg { width: 10px; height: 10px; flex-shrink: 0; }
+
+    /* ── Live payment stage indicator ── */
+    .stage-tracker {
+      display: flex; flex-direction: column; gap: 10px;
+      padding: 12px 14px; min-width: 300px;
+    }
+
+    .stage-steps { display: flex; flex-direction: column; gap: 6px; }
+
+    .stage-step {
+      display: flex; align-items: center; gap: 9px;
+      font-size: 12.5px; color: var(--text-dim);
+      transition: color .25s, opacity .25s;
+      opacity: .45;
+    }
+    .stage-step.done    { color: var(--cobalt); opacity: 1; }
+    .stage-step.active  { color: var(--text);   opacity: 1; }
+
+    .step-icon {
+      width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; border: 1.5px solid currentColor;
+      transition: background .25s, border-color .25s;
+    }
+    .stage-step.done   .step-icon { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
+    .stage-step.active .step-icon { border-color: var(--accent); color: var(--accent); }
+
+    .step-spinner {
+      width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+      border: 2px solid #8259EF30; border-top-color: var(--accent);
+      animation: spin .75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .stage-message {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12px; color: var(--text-muted);
+      border-top: 1px solid var(--border); padding-top: 9px; margin-top: 2px;
+      min-height: 22px;
+    }
+    .stage-message-text { transition: opacity .2s; }
+    .stage-message-text.fade { opacity: 0; }
+
+    /* ── Welcome ── */
+    .welcome {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      flex: 1; gap: 16px; padding: 40px 24px; text-align: center;
+    }
+    .welcome-icon {
+      font-size: 64px; margin-bottom: 4px; line-height: 1;
+      font-style: italic; font-weight: 700; font-family: 'Montserrat', sans-serif;
+      background: var(--gradient); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .welcome h2   { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -.4px; }
+    .welcome p    { font-size: 14px; max-width: 400px; color: var(--text-muted); line-height: 1.65; }
+    .welcome-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; margin-top: 4px; }
+    .chip {
+      padding: 7px 14px; border-radius: 20px; border: 1px solid var(--border);
+      background: var(--surface-2); font-size: 13px; color: var(--text-muted);
+      cursor: pointer; transition: all .15s;
+    }
+    .chip:hover { border-color: var(--accent); color: #fff; background: var(--accent-dim); }
+
+    /* ── Input ── */
+    .input-area { padding: 14px 24px 20px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+    .input-wrap {
+      display: flex; gap: 10px; align-items: flex-end;
+      background: var(--surface-2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 10px 12px 10px 16px; transition: border-color .15s;
+    }
+    .input-wrap:focus-within { border-color: var(--accent); }
+    textarea {
+      flex: 1; background: transparent; border: none; outline: none;
+      color: var(--text); font-family: 'Montserrat', system-ui, sans-serif;
+      font-size: 14.5px; line-height: 1.5; resize: none;
+      min-height: 24px; max-height: 160px; overflow-y: auto;
+    }
+    textarea::placeholder { color: var(--text-dim); }
+    .send-btn {
+      width: 36px; height: 36px; border-radius: 8px;
+      background: var(--gradient);
+      border: none; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; flex-shrink: 0; transition: opacity .15s, transform .15s; color: #fff;
+    }
+    .send-btn:hover:not(:disabled) { opacity: .85; transform: scale(1.05); }
+    .send-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .send-btn svg { width: 16px; height: 16px; }
+    .input-hint { margin-top: 8px; font-size: 11.5px; color: var(--text-dim); text-align: center; }
+    .input-hint kbd { font-family: 'JetBrains Mono', monospace; font-size: 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+    /* ── Error ── */
+    .error-bubble { background: #1E1014; border: 1px solid #5A1A1A; color: var(--red); padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; align-self: center; max-width: 88%; }
+
+    /* typing dots */
+    .typing { display: flex; align-items: center; gap: 5px; padding: 12px 14px; }
+    .typing-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); animation: typing 1.2s ease-in-out infinite; }
+    .typing-dot:nth-child(2) { animation-delay: .2s; }
+    .typing-dot:nth-child(3) { animation-delay: .4s; }
+    @keyframes typing { 0%,80%,100%{transform:scale(.7);opacity:.4} 40%{transform:scale(1);opacity:1} }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="header-left">
+      <div class="logo">H</div>
+      <div>
+        <div class="header-title">Alt-agent</div>
+        <div class="header-sub" id="headerSub"><span class="network-dot"></span>Hedera Testnet · HBAR · Auto-routed · Claude + GPT</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="toggle-group">
+        <span class="toggle-label">Net</span>
+        <button class="toggle-btn active" data-network="testnet" onclick="setNetwork('testnet')">Testnet</button>
+        <button class="toggle-btn"        data-network="mainnet" onclick="setNetwork('mainnet')">Mainnet</button>
+      </div>
+      <div class="toggle-group" id="modelToggle">
+        <span class="toggle-label">Model</span>
+        <button class="toggle-btn active" data-tier="auto"          onclick="setTier('auto')"          title="Router picks a tier per prompt">Auto</button>
+        <button class="toggle-btn"        data-tier="small-fast"    onclick="setTier('small-fast')"     title="$0.0005 (0.0005 HBAR) — short, simple prompts">Fast</button>
+        <button class="toggle-btn"        data-tier="default"       onclick="setTier('default')"        title="$0.001 (0.001 HBAR) — general-purpose">Standard</button>
+        <button class="toggle-btn"        data-tier="large-capable" onclick="setTier('large-capable')"  title="$0.002 (0.002 HBAR) — code, analysis, long prompts">Pro</button>
+      </div>
+      <div class="spend-counter">
+        <span class="spend-label">Spent</span>
+        <span class="spend-amount" id="totalSpent">0.0000</span>
+      </div>
+      <div class="wallet-area">
+        <button class="wallet-btn" id="walletBtn" onclick="connectWallet()">
+          <span class="wallet-btn-dot" aria-hidden="true"></span>
+          <span>Connect Wallet</span>
+        </button>
+        <div class="wallet-connected-row" id="walletConnectedRow" hidden>
+          <span class="wallet-account" id="creditsAccountId" title="Connected account">0.0.0</span>
+          <span class="credits-pill" title="Prepaid balance">
+            <span class="credits-pill-label">Balance</span>
+            <strong id="creditsBalance">$0.0000</strong>
+          </span>
+          <button class="credits-buy-btn-sm" onclick="buyCredits('starter')" title="Buy $1 in credits">+$1</button>
+          <button class="credits-buy-btn-sm" onclick="buyCredits('plus')" title="Buy $5 in credits">+$5</button>
+          <button class="wallet-disconnect-btn" onclick="disconnectWallet()" title="Disconnect">✕</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="messages" id="messages">
+    <div class="welcome" id="welcome">
+      <div class="welcome-icon">ℏ</div>
+      <h2>Start a conversation</h2>
+      <p id="welcomeDesc">
+        Each message triggers an automatic <strong>0.001 HBAR</strong> payment
+        on <strong>Hedera Testnet</strong> via x402. Watch the live payment status as it processes.
+      </p>
+      <div class="welcome-chips">
+        <div class="chip" onclick="sendSuggestion(this)">Explain the x402 payment protocol</div>
+        <div class="chip" onclick="sendSuggestion(this)">What is Hedera Hashgraph?</div>
+        <div class="chip" onclick="sendSuggestion(this)">Write a Python quicksort with explanation</div>
+        <div class="chip" onclick="sendSuggestion(this)">Write a haiku about micropayments</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="input-area">
+    <div class="input-wrap">
+      <textarea id="userInput" placeholder="Ask anything… each message costs 0.001 HBAR" rows="1" autofocus></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()" title="Send">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="22" y1="2" x2="11" y2="13"></line>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+        </svg>
+      </button>
+    </div>
+    <div class="input-hint"><kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line</div>
+  </div>
+
+</div>
+<script src="/wallet-bundle.js"></script>
+<script>
+  // ── marked config ──────────────────────────────────────────────
+  marked.setOptions({ breaks: true, gfm: true });
+  function renderMarkdown(text) {
+    return DOMPurify.sanitize(marked.parse(text), { ADD_ATTR: ['target', 'rel'] });
+  }
+
+  // ── State ──────────────────────────────────────────────────────
+  const messagesEl  = document.getElementById('messages');
+  const inputEl     = document.getElementById('userInput');
+  const sendBtn     = document.getElementById('sendBtn');
+  const spendEl     = document.getElementById('totalSpent');
+  const welcomeEl   = document.getElementById('welcome');
+  const welcomeDesc = document.getElementById('welcomeDesc');
+  const headerSub   = document.getElementById('headerSub');
+
+  let history          = [];
+  let isLoading        = false;
+  let serviceAccountId = '';
+  let agentAccountId   = '';
+  let selectedNetwork  = 'testnet'; // 'testnet' | 'mainnet'
+  const selectedAsset  = 'HBAR';    // USDC needs token association on the payer account — HBAR only, for now
+  let selectedTier     = 'auto';    // 'auto' | 'small-fast' | 'default' | 'large-capable'
+
+  const modelToggleEl = document.getElementById('modelToggle');
+  const TIER_PRICES = { 'small-fast': '$0.0005', 'default': '$0.001', 'large-capable': '$0.002' };
+  const TIER_LABELS = { 'small-fast': 'Fast', 'default': 'Standard', 'large-capable': 'Pro' };
+
+  function setNetwork(network) {
+    selectedNetwork = network;
+    document.querySelectorAll('[data-network]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.network === network);
+    });
+    updateDynamicLabels();
+  }
+
+  function setTier(tier) {
+    selectedTier = tier;
+    document.querySelectorAll('[data-tier]').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tier === tier);
+    });
+    updateDynamicLabels();
+  }
+
+  // The router-priced /infer routes are USDC-only, but that's the agent's own wallet paying
+  // on the user's behalf — credits (tracked in USD) cover it regardless of which asset the
+  // user has selected. Only mainnet falls outside the tiered/credits system entirely.
+  function tieringAvailable() {
+    return selectedNetwork === 'testnet';
+  }
+
+  function updateDynamicLabels() {
+    const netLabel   = selectedNetwork === 'mainnet' ? 'Mainnet' : 'Testnet';
+    const tiered     = tieringAvailable();
+    modelToggleEl.classList.toggle('disabled', !tiered);
+
+    // Fixed demo convention throughout this app: $1 USD == 1 HBAR (not a real market rate) —
+    // so the HBAR-equivalent shown alongside a dollar price is just the same number.
+    let costLabel;
+    if (tiered && selectedTier !== 'auto') {
+      const usd = parseFloat(TIER_PRICES[selectedTier].replace('$', ''));
+      costLabel = `${TIER_PRICES[selectedTier]} (${usd} HBAR)`;
+    } else if (tiered) {
+      costLabel = '$0.0005–$0.002 (0.0005–0.002 HBAR) — router-priced';
+    } else {
+      costLabel = '$0.001 (0.001 HBAR)';
+    }
+
+    headerSub.innerHTML = `<span class="network-dot"></span>Hedera ${netLabel} · ${selectedAsset}${tiered ? ' · ' + (selectedTier === 'auto' ? 'Auto-routed' : TIER_LABELS[selectedTier]) : ''} · Claude + GPT`;
+    if (welcomeDesc) {
+      welcomeDesc.innerHTML = `Each message triggers an automatic <strong>${costLabel}</strong> payment on <strong>Hedera ${netLabel}</strong> via x402. Watch the live payment status as it processes.`;
+    }
+    inputEl.placeholder = `Ask anything… each message costs ${costLabel}`;
+  }
+
+  // Payment stages in order — used to build the step list in the tracker.
+  const STAGES = [
+    { key: 'connecting',       icon: '🔌', label: 'Connect'         },
+    { key: 'payment_required', icon: '💳', label: 'Sign tx'         },
+    { key: 'sending',          icon: '📤', label: 'Submit to x402'  },
+    { key: 'model_running',    icon: '🧠', label: 'Model running'   },
+    { key: 'accepted',         icon: '✓',  label: 'Settled'         },
+  ];
+
+  // ── Textarea auto-resize ───────────────────────────────────────
+  inputEl.addEventListener('input', () => {
+    inputEl.style.height = 'auto';
+    inputEl.style.height = Math.min(inputEl.scrollHeight, 160) + 'px';
+  });
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+
+  function sendSuggestion(el) {
+    inputEl.value = el.textContent.trim();
+    sendMessage();
+  }
+
+  // ── Wallet connect + credits ──────────────────────────────────────
+  const walletBtnEl   = document.getElementById('walletBtn');
+  const walletRowEl   = document.getElementById('walletConnectedRow');
+  const creditsBalEl  = document.getElementById('creditsBalance');
+  const creditsAcctEl = document.getElementById('creditsAccountId');
+
+  let appConfig       = null; // { walletConnectProjectId, serviceBaseUrl }
+  let walletAccountId = null;
+  let creditsBalance  = 0;
+
+  async function getAppConfig() {
+    if (appConfig) return appConfig;
+    const res = await fetch('/api/config');
+    appConfig = await res.json();
+    return appConfig;
+  }
+
+  function shortAccount(id) {
+    return id && id.length > 10 ? id.slice(0, 6) + '…' + id.slice(-4) : id;
+  }
+
+  function updateWalletUI() {
+    if (walletAccountId) {
+      walletBtnEl.hidden = true;
+      walletRowEl.hidden = false;
+      creditsAcctEl.textContent = shortAccount(walletAccountId);
+      creditsAcctEl.title = walletAccountId;
+      creditsBalEl.textContent = `$${creditsBalance.toFixed(4)}`;
+    } else {
+      walletBtnEl.hidden = false;
+      walletRowEl.hidden = true;
+    }
+  }
+
+  async function refreshBalance() {
+    if (!walletAccountId) return;
+    try {
+      const cfg = await getAppConfig();
+      const res = await fetch(`${cfg.serviceBaseUrl}/credits/balance/${walletAccountId}`);
+      const data = await res.json();
+      creditsBalance = data.balance ?? 0;
+      updateWalletUI();
+    } catch (err) {
+      console.error('Failed to refresh balance:', err);
+    }
+  }
+
+  async function connectWallet() {
+    try {
+      const cfg = await getAppConfig();
+      if (!cfg.walletConnectProjectId) {
+        appendError('Wallet connect is not configured on the server (missing WALLETCONNECT_PROJECT_ID).');
+        return;
+      }
+      await window.X402Wallet.init(cfg.walletConnectProjectId);
+      const { accountId } = await window.X402Wallet.connect();
+      walletAccountId = accountId;
+      updateWalletUI();
+      await refreshBalance();
+    } catch (err) {
+      appendError('Wallet connect failed: ' + (err.message || err));
+    }
+  }
+
+  async function disconnectWallet() {
+    await window.X402Wallet.disconnect().catch(() => {});
+    walletAccountId = null;
+    creditsBalance = 0;
+    updateWalletUI();
+  }
+
+  async function buyCredits(bundleId) {
+    if (!walletAccountId) return;
+    try {
+      const cfg = await getAppConfig();
+      const result = await window.X402Wallet.purchaseCredits(cfg.serviceBaseUrl, bundleId);
+      await refreshBalance();
+      appendMessage('assistant', `✓ Purchased $${result.amount} in credits.`);
+    } catch (err) {
+      appendError('Purchase failed: ' + (err.message || err));
+    }
+  }
+
+  // ── Send ───────────────────────────────────────────────────────
+  // Predicts which tier a prompt will route to, purely client-side (same router as the server),
+  // so we can decide whether prepaid credits cover it before making any network call.
+  function predictTierAndCost() {
+    if (selectedNetwork !== 'testnet') return null; // mainnet stays outside credits/tiering entirely
+    const lastUserMessage = [...history].reverse().find(m => m.role === 'user')?.content ?? '';
+    const tier = window.X402Wallet.MODEL_CATALOGUE[selectedTier]
+      ? selectedTier
+      : window.X402Wallet.selectModel(lastUserMessage).tier;
+    const cost = parseFloat(window.X402Wallet.MODEL_CATALOGUE[tier].price.replace('$', ''));
+    return { tier, cost };
+  }
+
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || isLoading) return;
+
+    if (welcomeEl) welcomeEl.remove();
+
+    setLoading(true);
+    inputEl.value = '';
+    inputEl.style.height = 'auto';
+
+    history.push({ role: 'user', content: text });
+    appendMessage('user', text);
+
+    const prediction = predictTierAndCost(); // null for HBAR / mainnet — credits don't cover those
+
+    if (!walletAccountId) {
+      if (prediction) {
+        appendError('Connect a wallet to chat — buy credits, or pay per message directly.');
+        history.pop();
+        setLoading(false);
+        return;
+      }
+      // No wallet, and this network/asset isn't credit-gated (legacy HBAR/mainnet demo path) —
+      // the agent pays unconditionally from its own wallet, as before.
+      await sendViaAgentCredits(text);
+      return;
+    }
+
+    // A connected wallet always pays for its own usage. Credits (silent, agent-paid) only cover
+    // the testnet+USDC tiered path and only when the balance is enough; everything else — HBAR,
+    // mainnet, or an empty balance — falls back to a direct wallet-signed payment.
+    if (prediction && creditsBalance >= prediction.cost) {
+      await sendViaAgentCredits(text);
+    } else {
+      await sendViaWalletDirect(text, prediction);
+    }
+  }
+
+  // Wallet-direct path: the connected wallet signs and pays via x402 for this one message —
+  // used whenever credits don't cover it (insufficient balance, or a network/asset the credits
+  // system doesn't track, like HBAR or mainnet).
+  async function sendViaWalletDirect(text, prediction) {
+    const { trackerEl, updateStage, removeTracker } = createStageTracker();
+    updateStage('payment_required', 'Sign the payment in your wallet…');
+
+    // The tier route (/infer/{tier}) is USDC-only — a direct wallet payment always uses the
+    // real selected network/asset (HBAR) route instead, regardless of what tier was predicted
+    // for credits-accounting purposes. Only the agent-pays-from-credits path uses the tier route.
+    const route = { network: selectedNetwork, asset: selectedAsset };
+
+    try {
+      const cfg = await getAppConfig();
+      const reply = await window.X402Wallet.payPerMessage(cfg.serviceBaseUrl, route, history);
+
+      removeTracker();
+      history.push({ role: 'assistant', content: reply });
+      appendMessage('assistant', reply, {
+        cost: 0.001, // legacy routes are a flat 0.001 HBAR
+        asset: selectedAsset,
+        network: selectedNetwork,
+        tier: null,
+      });
+    } catch (err) {
+      removeTracker();
+      appendError('Payment or inference failed: ' + (err.message || err));
+      history.pop();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Default path: the agent pays with its own wallet, drawing down the connected wallet's
+  // prepaid credit balance server-side — no per-message wallet popup.
+  async function sendViaAgentCredits(text) {
+    // Insert the live-updating tracker bubble
+    const { trackerEl, updateStage, removeTracker } = createStageTracker();
+
+    try {
+      // Use fetch + ReadableStream to consume the SSE response to a POST.
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: history, network: selectedNetwork, asset: selectedAsset, tier: selectedTier, payerAccountId: walletAccountId }),
+      });
+
+      if (!res.ok || !res.body) {
+        removeTracker();
+        const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+        appendError(err.error || 'Request failed');
+        history.pop();
+        return;
+      }
+
+      const reader  = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer    = '';
+      let doneData  = null;
+
+      // Read SSE stream chunk by chunk.
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Split on double-newline (SSE event boundary).
+        let boundary;
+        while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+          const block  = buffer.slice(0, boundary);
+          buffer       = buffer.slice(boundary + 2);
+          if (!block.trim()) continue;
+
+          let eventType = 'message';
+          let dataStr   = '';
+          for (const line of block.split('\n')) {
+            if (line.startsWith('event:')) eventType = line.slice(6).trim();
+            else if (line.startsWith('data:')) dataStr = line.slice(5).trim();
+          }
+          if (!dataStr) continue;
+
+          let payload;
+          try { payload = JSON.parse(dataStr); } catch { continue; }
+
+          if (eventType === 'status') {
+            updateStage(payload.stage, payload.message);
+          } else if (eventType === 'done') {
+            doneData = payload;
+          } else if (eventType === 'error') {
+            removeTracker();
+            appendError(payload.error || 'Server error');
+            history.pop();
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
+      removeTracker();
+
+      if (!doneData) {
+        appendError('No response received from server.');
+        history.pop();
+        return;
+      }
+
+      if (doneData.serviceAccountId) serviceAccountId = doneData.serviceAccountId;
+      if (doneData.agentAccountId)   agentAccountId   = doneData.agentAccountId;
+
+      history.push({ role: 'assistant', content: doneData.reply });
+      appendMessage('assistant', doneData.reply, {
+        cost: doneData.cost,
+        asset: doneData.asset,
+        network: doneData.network,
+        tier: doneData.tier,
+        serviceAccountId: doneData.serviceAccountId,
+      });
+      updateSpend(doneData.totalSpent, doneData.asset);
+      if (doneData.tier) refreshBalance();
+
+    } catch (err) {
+      removeTracker();
+      appendError(err.message || 'Network error — is the agent server running?');
+      history.pop();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // ── Stage tracker bubble ───────────────────────────────────────
+  function createStageTracker() {
+    const msg = document.createElement('div');
+    msg.className = 'message assistant';
+
+    const avatar = document.createElement('div');
+    avatar.className = 'avatar ai';
+    avatar.textContent = 'ℏ';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'bubble-wrap';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+
+    // Build the step list
+    const tracker = document.createElement('div');
+    tracker.className = 'stage-tracker';
+
+    const stepsEl = document.createElement('div');
+    stepsEl.className = 'stage-steps';
+
+    const stepEls = {};
+    for (const s of STAGES) {
+      const stepEl = document.createElement('div');
+      stepEl.className = 'stage-step';
+      stepEl.dataset.key = s.key;
+
+      const iconEl = document.createElement('div');
+      iconEl.className = 'step-icon';
+      iconEl.textContent = s.key === 'accepted' ? s.icon : '·';
+
+      const labelEl = document.createElement('span');
+      labelEl.textContent = s.label;
+
+      stepEl.appendChild(iconEl);
+      stepEl.appendChild(labelEl);
+      stepsEl.appendChild(stepEl);
+      stepEls[s.key] = { el: stepEl, icon: iconEl };
+    }
+
+    // Current status message at the bottom
+    const msgRow = document.createElement('div');
+    msgRow.className = 'stage-message';
+
+    const msgSpinner = document.createElement('div');
+    msgSpinner.className = 'step-spinner';
+
+    const msgText = document.createElement('span');
+    msgText.className = 'stage-message-text';
+    msgText.textContent = 'Initialising…';
+
+    msgRow.appendChild(msgSpinner);
+    msgRow.appendChild(msgText);
+
+    tracker.appendChild(stepsEl);
+    tracker.appendChild(msgRow);
+    bubble.appendChild(tracker);
+    wrap.appendChild(bubble);
+    msg.appendChild(avatar);
+    msg.appendChild(wrap);
+    messagesEl.appendChild(msg);
+    scrollToBottom();
+
+    const stageOrder = STAGES.map(s => s.key);
+    let currentIdx = -1;
+
+    function updateStage(key, message) {
+      const newIdx = stageOrder.indexOf(key);
+      if (newIdx === -1) return;
+
+      // Mark everything before this index as done
+      for (let i = 0; i <= newIdx; i++) {
+        const s = STAGES[i];
+        const { el, icon } = stepEls[s.key];
+        if (i < newIdx) {
+          el.className = 'stage-step done';
+          icon.innerHTML = '✓';
+          icon.className = 'step-icon';
+        } else {
+          el.className = 'stage-step active';
+          // Replace icon with spinner for active step
+          const spinner = document.createElement('div');
+          spinner.className = key === 'accepted' ? 'step-icon' : 'step-spinner';
+          if (key === 'accepted') {
+            spinner.textContent = '✓';
+            el.className = 'stage-step done';
+          }
+          icon.replaceWith(spinner);
+          stepEls[s.key].icon = spinner;
+        }
+      }
+
+      // Fade + update message text
+      msgText.classList.add('fade');
+      setTimeout(() => {
+        msgText.textContent = message || key;
+        msgText.classList.remove('fade');
+      }, 180);
+
+      if (key === 'accepted') {
+        msgSpinner.style.display = 'none';
+      }
+
+      currentIdx = newIdx;
+      scrollToBottom();
+    }
+
+    function removeTracker() {
+      msg.remove();
+    }
+
+    return { trackerEl: msg, updateStage, removeTracker };
+  }
+
+  // ── DOM helpers ────────────────────────────────────────────────
+  function appendMessage(role, text, payment) {
+    const msg = document.createElement('div');
+    msg.className = `message ${role}`;
+
+    const avatar = document.createElement('div');
+    avatar.className = `avatar ${role === 'user' ? 'user' : 'ai'}`;
+    avatar.textContent = role === 'user' ? '👤' : 'ℏ';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'bubble-wrap';
+
+    const bubble = document.createElement('div');
+    if (role === 'assistant') {
+      bubble.className = 'bubble markdown';
+      bubble.innerHTML = renderMarkdown(text);
+      bubble.querySelectorAll('a').forEach(a => {
+        a.setAttribute('target', '_blank');
+        a.setAttribute('rel', 'noopener noreferrer');
+      });
+    } else {
+      bubble.className = 'bubble';
+      bubble.textContent = text;
+    }
+    wrap.appendChild(bubble);
+
+    if (role === 'assistant' && payment) {
+      const infoRow = document.createElement('div');
+      infoRow.className = 'payment-info';
+
+      // Fixed demo convention: $1 USD == 1 HBAR (not a real market rate).
+      const costStr = `$${payment.cost.toFixed(4)} (${payment.cost.toFixed(4)} HBAR)`;
+
+      const badge = document.createElement('div');
+      badge.className = 'payment-badge';
+      badge.innerHTML = `✓ x402 paid &nbsp;·&nbsp; ${costStr}`;
+      infoRow.appendChild(badge);
+
+      if (payment.tier) {
+        const tierBadge = document.createElement('div');
+        tierBadge.className = 'tier-badge';
+        tierBadge.textContent = `⚡ ${TIER_LABELS[payment.tier] ?? payment.tier}`;
+        infoRow.appendChild(tierBadge);
+      }
+
+      if (payment.serviceAccountId) {
+        const net  = payment.network ?? 'testnet';
+        const link = document.createElement('a');
+        link.className = 'hashscan-link';
+        link.href = `https://hashscan.io/${net}/account/${payment.serviceAccountId}`;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.title = `View service account on HashScan (${net})`;
+        link.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+            <polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>
+          </svg>
+          HashScan ↗
+        `;
+        infoRow.appendChild(link);
+      }
+
+      wrap.appendChild(infoRow);
+    }
+
+    msg.appendChild(avatar);
+    msg.appendChild(wrap);
+    messagesEl.appendChild(msg);
+    scrollToBottom();
+  }
+
+  function appendError(msg) {
+    const div = document.createElement('div');
+    div.className = 'error-bubble';
+    div.textContent = '⚠ ' + msg;
+    messagesEl.appendChild(div);
+    scrollToBottom();
+  }
+
+  function updateSpend(total) {
+    // Fixed demo convention: $1 USD == 1 HBAR (not a real market rate).
+    spendEl.textContent = `$${total.toFixed(4)} (${total.toFixed(4)} HBAR)`;
+    spendEl.classList.add('flash');
+    setTimeout(() => spendEl.classList.remove('flash'), 600);
+  }
+
+  function setLoading(val) {
+    isLoading = val;
+    sendBtn.disabled = val;
+    inputEl.disabled = val;
+  }
+
+  function scrollToBottom() {
+    messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
+  }
+
+  // ── Init ───────────────────────────────────────────────────────
+  updateDynamicLabels();
+
+  fetch('/api/stats')
+    .then(r => r.json())
+    .then(d => {
+      if (d.totalSpent > 0) updateSpend(d.totalSpent);
+      if (d.serviceAccountId) serviceAccountId = d.serviceAccountId;
+      if (d.agentAccountId)   agentAccountId   = d.agentAccountId;
+    })
+    .catch(() => {});
+
+  // Silently restore a wallet session from a previous page load, if one exists —
+  // WalletConnect persists sessions itself, so no popup/pairing is needed here.
+  (async () => {
+    try {
+      const cfg = await getAppConfig();
+      if (!cfg.walletConnectProjectId) return;
+      await window.X402Wallet.init(cfg.walletConnectProjectId);
+      const restored = window.X402Wallet.getAccountId();
+      if (restored) {
+        walletAccountId = restored;
+        updateWalletUI();
+        await refreshBalance();
+      }
+    } catch (err) {
+      console.warn('Wallet session restore skipped:', err);
+    }
+  })();
+</script>
+</body>
+</html>
