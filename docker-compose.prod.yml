@@ -1,0 +1,21 @@
+# Production overlay — apply alongside docker-compose.yml:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Binds container ports to 127.0.0.1 only (nginx reverse-proxies from there — matches
+# how every other app on this host is set up) and points the browser-facing service
+# URL at the real public domain instead of localhost.
+services:
+  # mongo is only reached internally (mongo:27017 inside the compose network) — no host port
+  # mapping needed, and the host's 27017 is already taken by another app on this server.
+  mongo:
+    ports: !reset []
+
+  service:
+    ports: !override
+      - "127.0.0.1:4121:4021"
+
+  agent:
+    environment:
+      PUBLIC_SERVICE_URL: https://hedera-service.himotechglobal.com
+    ports: !override
+      - "127.0.0.1:3161:3001"
