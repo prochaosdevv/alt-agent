@@ -43,6 +43,14 @@
 
     html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Montserrat', system-ui, sans-serif; font-size: 15px; line-height: 1.6; }
 
+    /* Visible keyboard focus on every interactive element — buttons/links had none before,
+       so tabbing through the app gave no indication of where focus was. */
+    a:focus-visible, button:focus-visible, textarea:focus-visible, [onclick]:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+      border-radius: var(--radius-sm);
+    }
+
     /* ── Layout ── */
     .app { display: flex; flex-direction: column; height: 100dvh; max-width: 860px; margin: 0 auto; }
 
@@ -143,6 +151,12 @@
       cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all .15s;
     }
     .credits-buy-btn-sm:hover { border-color: var(--accent); background: var(--accent-dim); color: #fff; }
+    .clear-chat-btn {
+      padding: 4px 9px; border-radius: 14px; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text-muted); font-size: 11px; font-weight: 600;
+      cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: all .15s;
+    }
+    .clear-chat-btn:hover { border-color: var(--red); background: #E0545418; color: var(--red); }
     .wallet-disconnect-btn {
       width: 20px; height: 20px; border-radius: 50%; border: none; background: none;
       color: var(--text-dim); font-size: 11px; cursor: pointer; display: flex;
@@ -382,6 +396,7 @@
         <span class="spend-label">Spent</span>
         <span class="spend-amount" id="totalSpent">0.0000</span>
       </div>
+      <button class="clear-chat-btn" onclick="clearChat()" title="Clear the conversation (keeps balances and spend)">Clear</button>
       <div class="wallet-area">
         <button class="wallet-btn" id="walletBtn" onclick="connectWallet()">
           <span class="wallet-btn-dot" aria-hidden="true"></span>
@@ -1080,6 +1095,14 @@
     messagesEl.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
   }
 
+  // Resets the conversation only — balances and spend are real payment records, not
+  // conversation state, so clearing the chat must never touch them.
+  function clearChat() {
+    if (isLoading) return;
+    history = [];
+    messagesEl.innerHTML = '';
+  }
+
   // ── Init ───────────────────────────────────────────────────────
   updateDynamicLabels();
 
@@ -1110,6 +1133,14 @@
       console.warn('Wallet session restore skipped:', err);
     }
   })();
+
+  // Both balances can drift from what's shown (a purchase or payment from another tab, the
+  // wallet itself moving funds) — keep them fresh without requiring a page reload.
+  setInterval(() => {
+    if (!walletAccountId) return;
+    refreshBalance();
+    refreshWalletHbarBalance();
+  }, 20000);
 </script>
 </body>
 </html>
