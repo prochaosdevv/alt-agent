@@ -377,7 +377,7 @@
         <button class="toggle-btn"        data-tier="default"       onclick="setTier('default')"        title="$0.001 (0.001 HBAR) — general-purpose">Standard</button>
         <button class="toggle-btn"        data-tier="large-capable" onclick="setTier('large-capable')"  title="$0.002 (0.002 HBAR) — code, analysis, long prompts">Pro</button>
       </div>
-      <div class="spend-counter">
+      <div class="spend-counter" title="This session's total — wallet-direct payments + credits spent, combined">
         <span class="spend-label">Spent</span>
         <span class="spend-amount" id="totalSpent">0.0000</span>
       </div>
@@ -388,9 +388,13 @@
         </button>
         <div class="wallet-connected-row" id="walletConnectedRow" hidden>
           <span class="wallet-account" id="creditsAccountId" title="Connected account">0.0.0</span>
-          <span class="credits-pill" title="Prepaid balance">
-            <span class="credits-pill-label">Balance</span>
+          <span class="credits-pill" title="Prepaid credit balance">
+            <span class="credits-pill-label">Credit Balance</span>
             <strong id="creditsBalance">$0.0000</strong>
+          </span>
+          <span class="credits-pill" title="Wallet's actual HBAR balance, from the mirror node">
+            <span class="credits-pill-label">Wallet</span>
+            <strong id="walletHbarBalance">— ℏ</strong>
           </span>
           <button class="credits-buy-btn-sm" onclick="buyCredits('starter')" title="Buy $1 in credits">+$1</button>
           <button class="credits-buy-btn-sm" onclick="buyCredits('plus')" title="Buy $5 in credits">+$5</button>
@@ -531,14 +535,17 @@
   }
 
   // ── Wallet connect + credits ──────────────────────────────────────
-  const walletBtnEl   = document.getElementById('walletBtn');
-  const walletRowEl   = document.getElementById('walletConnectedRow');
-  const creditsBalEl  = document.getElementById('creditsBalance');
-  const creditsAcctEl = document.getElementById('creditsAccountId');
+  const walletBtnEl     = document.getElementById('walletBtn');
+  const walletRowEl     = document.getElementById('walletConnectedRow');
+  const creditsBalEl    = document.getElementById('creditsBalance');
+  const walletHbarBalEl = document.getElementById('walletHbarBalance');
+  const creditsAcctEl   = document.getElementById('creditsAccountId');
 
-  let appConfig       = null; // { walletConnectProjectId, serviceBaseUrl }
-  let walletAccountId = null;
-  let creditsBalance  = 0;
+  let appConfig        = null; // { walletConnectProjectId, serviceBaseUrl }
+  let walletAccountId  = null;
+  let creditsBalance   = 0;
+  let walletHbarBalance = null; // null until fetched — distinguishes "unknown" from "0 ℏ"
+  let sessionSpend      = 0;    // this tab's running total, wallet-direct + credits combined
 
   async function getAppConfig() {
     if (appConfig) return appConfig;
@@ -558,10 +565,34 @@
       creditsAcctEl.textContent = shortAccount(walletAccountId);
       creditsAcctEl.title = walletAccountId;
       creditsBalEl.textContent = `$${creditsBalance.toFixed(4)}`;
+      walletHbarBalEl.textContent = walletHbarBalance === null ? '— ℏ' : `${walletHbarBalance.toFixed(4)} ℏ`;
     } else {
       walletBtnEl.hidden = false;
       walletRowEl.hidden = true;
     }
+  }
+
+  // Reads the connected wallet's real HBAR balance straight from Hedera's public mirror node —
+  // this is the wallet's own on-chain balance, distinct from the prepaid credit balance above.
+  async function refreshWalletHbarBalance() {
+    if (!walletAccountId) return;
+    try {
+      const mirrorHost = selectedNetwork === 'mainnet' ? 'mainnet-public.mirrornode.hedera.com' : 'testnet.mirrornode.hedera.com';
+      const res = await fetch(`https://${mirrorHost}/api/v1/accounts/${walletAccountId}`);
+      const data = await res.json();
+      const tinybars = data.balance?.balance;
+      walletHbarBalance = typeof tinybars === 'number' ? tinybars / 1e8 : null;
+      updateWalletUI();
+    } catch (err) {
+      console.error('Failed to refresh wallet HBAR balance:', err);
+    }
+  }
+
+  // Adds to this tab's running spend total — called from both the credits path and the
+  // wallet-direct fallback path, so "Spent" reflects real spend across either payment method.
+  function addSpend(amount) {
+    sessionSpend = parseFloat((sessionSpend + amount).toFixed(6));
+    updateSpend(sessionSpend);
   }
 
   async function refreshBalance() {
@@ -588,7 +619,7 @@
       const { accountId } = await window.X402Wallet.connect();
       walletAccountId = accountId;
       updateWalletUI();
-      await refreshBalance();
+      await Promise.all([refreshBalance(), refreshWalletHbarBalance()]);
     } catch (err) {
       appendError('Wallet connect failed: ' + (err.message || err));
     }
@@ -598,6 +629,7 @@
     await window.X402Wallet.disconnect().catch(() => {});
     walletAccountId = null;
     creditsBalance = 0;
+    walletHbarBalance = null;
     updateWalletUI();
   }
 
@@ -606,7 +638,7 @@
     try {
       const cfg = await getAppConfig();
       const result = await window.X402Wallet.purchaseCredits(cfg.serviceBaseUrl, bundleId);
-      await refreshBalance();
+      await Promise.all([refreshBalance(), refreshWalletHbarBalance()]);
       appendMessage('assistant', `✓ Purchased $${result.amount} in credits.`);
     } catch (err) {
       appendError('Purchase failed: ' + (err.message || err));
@@ -690,6 +722,8 @@
         hcsTopicId,
         hcsTransactionId,
       });
+      addSpend(0.001);
+      refreshWalletHbarBalance(); // this path pays from the connected wallet itself, unlike credits
     } catch (err) {
       removeTracker();
       appendError('Payment or inference failed: ' + (err.message || err));
@@ -785,7 +819,7 @@
         hcsTopicId: doneData.hcsTopicId,
         hcsTransactionId: doneData.hcsTransactionId,
       });
-      updateSpend(doneData.totalSpent, doneData.asset);
+      addSpend(doneData.cost);
       if (doneData.tier) refreshBalance();
 
     } catch (err) {
@@ -1048,10 +1082,11 @@
   // ── Init ───────────────────────────────────────────────────────
   updateDynamicLabels();
 
+  // "Spent" is tracked per-tab in sessionSpend (addSpend), not hydrated from here — /api/stats'
+  // totalSpent is a server-wide counter across every user of this process, not this session's.
   fetch('/api/stats')
     .then(r => r.json())
     .then(d => {
-      if (d.totalSpent > 0) updateSpend(d.totalSpent);
       if (d.serviceAccountId) serviceAccountId = d.serviceAccountId;
       if (d.agentAccountId)   agentAccountId   = d.agentAccountId;
     })
@@ -1068,7 +1103,7 @@
       if (restored) {
         walletAccountId = restored;
         updateWalletUI();
-        await refreshBalance();
+        await Promise.all([refreshBalance(), refreshWalletHbarBalance()]);
       }
     } catch (err) {
       console.warn('Wallet session restore skipped:', err);
