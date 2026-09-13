@@ -117,9 +117,18 @@ app.post('/api/chat', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const fetchForRequest = x402.createFetchForRequest((stage: PaymentStage) => {
-    sendSSE(res, 'status', { stage, message: STAGE_LABELS[stage] });
-  });
+  let hcsTopicId: string | null = null;
+  let hcsTransactionId: string | null = null;
+
+  const fetchForRequest = x402.createFetchForRequest(
+    (stage: PaymentStage) => {
+      sendSSE(res, 'status', { stage, message: STAGE_LABELS[stage] });
+    },
+    (headers: Headers) => {
+      hcsTopicId = headers.get('x-hcs-topic-id');
+      hcsTransactionId = headers.get('x-hcs-transaction-id');
+    },
+  );
 
   try {
     const model = resolvedTier
@@ -143,6 +152,8 @@ app.post('/api/chat', async (req, res) => {
       tier: resolvedTier,
       agentAccountId,
       serviceAccountId,
+      hcsTopicId,
+      hcsTransactionId,
     });
   } catch (err) {
     console.error('[chat] Error:', err);
@@ -164,6 +175,9 @@ app.get('/api/config', (_req, res) => {
   res.json({
     walletConnectProjectId: WALLETCONNECT_PROJECT_ID,
     serviceBaseUrl: PUBLIC_SERVICE_URL,
+    tierPrices: Object.fromEntries(
+      Object.entries(MODEL_CATALOGUE).map(([tier, entry]) => [tier, parseFloat(entry.price.replace('$', ''))]),
+    ),
   });
 });
 

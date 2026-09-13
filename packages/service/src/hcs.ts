@@ -4,7 +4,11 @@ export interface InferenceLogEntry {
   timestamp: string;
   model: string;
   price: string;
-  txReference: string;
+}
+
+export interface HCSReceipt {
+  topicId: string;
+  transactionId: string;
 }
 
 let _client: Client | null = null;
@@ -21,32 +25,45 @@ function getClient(): Client | null {
 }
 
 /**
- * Fire-and-forget: submits one message to the configured HCS topic after a successful
- * paid inference. Never throws — logging failures must not affect the inference response
- * already sent to the caller.
+ * Submits one message to the configured HCS topic for a paid inference, and resolves with
+ * the transaction ID as soon as the network accepts the submission — without waiting for the
+ * full consensus receipt, so the caller (which is holding up its own HTTP response for this)
+ * doesn't pay for that extra round-trip too. Consensus is confirmed separately afterward,
+ * fire-and-forget, purely for the server log. Never throws — a failed audit log must not fail
+ * the inference response.
  */
-export function logInferenceToHCS(entry: InferenceLogEntry): void {
+export async function logInferenceToHCS(entry: InferenceLogEntry): Promise<HCSReceipt | null> {
   const topicId = process.env.HCS_TOPIC_ID;
   if (!topicId) {
     console.warn('[hcs] HCS_TOPIC_ID not set — skipping audit log');
-    return;
+    return null;
   }
 
   const client = getClient();
   if (!client) {
     console.warn('[hcs] HEDERA_SERVICE_ACCOUNT_ID / HEDERA_SERVICE_PRIVATE_KEY not set — skipping audit log');
-    return;
+    return null;
   }
 
-  new TopicMessageSubmitTransaction()
-    .setTopicId(topicId)
-    .setMessage(JSON.stringify(entry))
-    .execute(client)
-    .then((tx) => tx.getReceipt(client))
-    .then((receipt) => {
-      console.log(`[hcs] logged inference — topic ${topicId}, status ${receipt.status.toString()}`);
-    })
-    .catch((err) => {
-      console.error('[hcs] failed to log inference (non-fatal):', err instanceof Error ? err.message : err);
-    });
+  try {
+    const tx = await new TopicMessageSubmitTransaction()
+      .setTopicId(topicId)
+      .setMessage(JSON.stringify(entry))
+      .execute(client);
+
+    const transactionId = tx.transactionId.toString();
+
+    tx.getReceipt(client)
+      .then((receipt) => {
+        console.log(`[hcs] confirmed — topic ${topicId}, tx ${transactionId}, status ${receipt.status.toString()}`);
+      })
+      .catch((err) => {
+        console.error('[hcs] consensus confirmation failed (non-fatal):', err instanceof Error ? err.message : err);
+      });
+
+    return { topicId, transactionId };
+  } catch (err) {
+    console.error('[hcs] failed to submit inference log (non-fatal):', err instanceof Error ? err.message : err);
+    return null;
+  }
 }

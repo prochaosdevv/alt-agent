@@ -41,7 +41,10 @@ export function initX402() {
     .register('hedera:testnet', new ExactHederaScheme(testnetSigner))
     .register('hedera:mainnet', new ExactHederaScheme(mainnetSigner));
 
-  function createFetchForRequest(onStatus: (stage: PaymentStage) => void): typeof fetch {
+  function createFetchForRequest(
+    onStatus: (stage: PaymentStage) => void,
+    onSettled?: (headers: Headers) => void,
+  ): typeof fetch {
     let modelRunningTimer: ReturnType<typeof setTimeout> | null = null;
 
     const statusFetch: typeof fetch = async (input) => {
@@ -72,6 +75,7 @@ export function initX402() {
 
         if (res.ok) {
           onStatus('accepted');
+          onSettled?.(res.headers);
         }
         return res;
       }

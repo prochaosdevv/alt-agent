@@ -142,11 +142,17 @@ async function purchaseCredits(serviceBaseUrl: string, bundleId: string): Promis
  * `route` is either a tier ('small-fast' | 'default' | 'large-capable' -> /infer/{tier}/...) or
  * a legacy { network, asset } pair (-> /v1/{network}/{asset}/...).
  */
+interface PaidMessageResult {
+  reply: string;
+  hcsTopicId: string | null;
+  hcsTransactionId: string | null;
+}
+
 async function payPerMessage(
   serviceBaseUrl: string,
   route: { tier: string } | { network: string; asset: string },
   messages: { role: string; content: string }[],
-): Promise<string> {
+): Promise<PaidMessageResult> {
   const payFetch = getWalletPayFetch();
 
   const path = 'tier' in route
@@ -164,8 +170,17 @@ async function payPerMessage(
     throw new Error(`Payment failed (HTTP ${res.status}): ${JSON.stringify(body)}`);
   }
 
+  // Read headers before res.json() — both are available on the same Response, but grabbing
+  // them here keeps the two reads next to each other rather than one right after the return.
+  const hcsTopicId       = res.headers.get('x-hcs-topic-id');
+  const hcsTransactionId = res.headers.get('x-hcs-transaction-id');
+
   const completion = await res.json();
-  return completion.choices?.[0]?.message?.content ?? '';
+  return {
+    reply: completion.choices?.[0]?.message?.content ?? '',
+    hcsTopicId,
+    hcsTransactionId,
+  };
 }
 
 async function getBalance(serviceBaseUrl: string, accountId: string): Promise<number> {

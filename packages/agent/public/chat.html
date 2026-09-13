@@ -32,6 +32,8 @@
       --cobalt:      #2D84EB;
       --cobalt-dim:  #2D84EB18;
       --red:         #E05454;
+      --success:     #34C77B;
+      --success-dim: #34C77B18;
       --code-bg:     #080B14;
       --code-border: #1A2038;
       --radius:      8px;
@@ -235,6 +237,21 @@
     }
     .hashscan-link:hover { background: #8259EF28; border-color: var(--accent); }
     .hashscan-link svg { width: 10px; height: 10px; flex-shrink: 0; }
+    .savings-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 11.5px; font-family: 'JetBrains Mono', monospace;
+      color: var(--success); padding: 3px 9px;
+      background: var(--success-dim); border: 1px solid #34C77B30; border-radius: 20px;
+    }
+    .hcs-link {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 11.5px; color: var(--success); text-decoration: none;
+      padding: 3px 9px; border-radius: 20px;
+      background: var(--success-dim); border: 1px solid #34C77B30;
+      transition: all .15s; font-weight: 500;
+    }
+    .hcs-link:hover { background: #34C77B28; border-color: var(--success); }
+    .hcs-link svg { width: 10px; height: 10px; flex-shrink: 0; }
 
     /* ── Live payment stage indicator ── */
     .stage-tracker {
@@ -661,7 +678,7 @@
 
     try {
       const cfg = await getAppConfig();
-      const reply = await window.X402Wallet.payPerMessage(cfg.serviceBaseUrl, route, history);
+      const { reply, hcsTopicId, hcsTransactionId } = await window.X402Wallet.payPerMessage(cfg.serviceBaseUrl, route, history);
 
       removeTracker();
       history.push({ role: 'assistant', content: reply });
@@ -670,6 +687,8 @@
         asset: selectedAsset,
         network: selectedNetwork,
         tier: null,
+        hcsTopicId,
+        hcsTransactionId,
       });
     } catch (err) {
       removeTracker();
@@ -763,6 +782,8 @@
         network: doneData.network,
         tier: doneData.tier,
         serviceAccountId: doneData.serviceAccountId,
+        hcsTopicId: doneData.hcsTopicId,
+        hcsTransactionId: doneData.hcsTransactionId,
       });
       updateSpend(doneData.totalSpent, doneData.asset);
       if (doneData.tier) refreshBalance();
@@ -891,6 +912,13 @@
     return { trackerEl: msg, updateStage, removeTracker };
   }
 
+  // Hedera's TransactionId.toString() is "0.0.X@seconds.nanos" — HashScan's URL format wants
+  // "0.0.X-seconds-nanos". Only the "." after the "@" needs converting, not the ones in "0.0.X".
+  function hashScanTxUrl(network, transactionId) {
+    const [account, time] = transactionId.split('@');
+    return `https://hashscan.io/${network}/transaction/${account}-${time.replace('.', '-')}`;
+  }
+
   // ── DOM helpers ────────────────────────────────────────────────
   function appendMessage(role, text, payment) {
     const msg = document.createElement('div');
@@ -934,6 +962,35 @@
         tierBadge.className = 'tier-badge';
         tierBadge.textContent = `⚡ ${TIER_LABELS[payment.tier] ?? payment.tier}`;
         infoRow.appendChild(tierBadge);
+
+        // Savings vs. what this same message would have cost on the largest tier — only
+        // meaningful here because the router actually picked a cheaper tier per-message; the
+        // flat-rate wallet-direct path always charges the same regardless of tier, so it has
+        // nothing to compare against.
+        const largestPrice = appConfig?.tierPrices?.['large-capable'];
+        if (typeof largestPrice === 'number' && largestPrice > payment.cost) {
+          const saved = largestPrice - payment.cost;
+          const savingsBadge = document.createElement('div');
+          savingsBadge.className = 'savings-badge';
+          savingsBadge.textContent = `↓ saved $${saved.toFixed(4)} vs large-capable`;
+          infoRow.appendChild(savingsBadge);
+        }
+      }
+
+      if (payment.hcsTransactionId) {
+        const link = document.createElement('a');
+        link.className = 'hcs-link';
+        link.href = hashScanTxUrl('testnet', payment.hcsTransactionId);
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.title = 'View this call\'s HCS audit log entry on HashScan';
+        link.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/>
+          </svg>
+          HCS receipt ↗
+        `;
+        infoRow.appendChild(link);
       }
 
       if (payment.serviceAccountId) {

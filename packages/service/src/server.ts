@@ -48,7 +48,7 @@ const testnetRS = createResourceServer('testnet');
 const mainnetRS = createResourceServer('mainnet');
 
 const app = express();
-app.use(cors({ exposedHeaders: ['PAYMENT-REQUIRED', 'PAYMENT-RESPONSE', 'X-PAYMENT-RESPONSE'] }));
+app.use(cors({ exposedHeaders: ['PAYMENT-REQUIRED', 'PAYMENT-RESPONSE', 'X-PAYMENT-RESPONSE', 'X-HCS-Topic-Id', 'X-HCS-Transaction-Id'] }));
 app.use(express.json({ limit: '10mb' }));
 
 app.use(paymentMiddleware(
@@ -151,18 +151,19 @@ async function handleInference(tier: ModelTier, req: Request, res: Response, log
   }
 
   if (logToHCS) {
-    // The x402 middleware buffers this response and only attaches PAYMENT-RESPONSE — and only
-    // actually flushes our 200 — after it settles the payment post-handler. A failed settlement
-    // replaces the buffered response with a 402, so only log once we know it truly succeeded.
-    res.once('finish', () => {
-      if (res.statusCode !== 200) return;
-      logInferenceToHCS({
-        timestamp: new Date().toISOString(),
-        model: `${provider}/${model}`,
-        price: MODEL_CATALOGUE[tier].price,
-        txReference: decodeSettlement(res).transaction,
-      });
+    // Awaited (not fire-and-forget) so the transaction ID is available to hand back to the
+    // caller as a receipt — adds one Hedera submit round-trip to the response, on top of the
+    // payment settlement and model call already in flight. A null result (topic/keys unset,
+    // or the submit itself failed) just means no receipt headers get attached below.
+    const receipt = await logInferenceToHCS({
+      timestamp: new Date().toISOString(),
+      model: `${provider}/${model}`,
+      price: MODEL_CATALOGUE[tier].price,
     });
+    if (receipt) {
+      res.setHeader('X-HCS-Topic-Id', receipt.topicId);
+      res.setHeader('X-HCS-Transaction-Id', receipt.transactionId);
+    }
   }
 
   res.json(completion);
